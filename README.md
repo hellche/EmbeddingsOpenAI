@@ -1,7 +1,7 @@
-# Text Embeddings (OpenAI) Sources
+# Text Embeddings (OpenAI)
 
-- word-vectors: [1](https://juliasilge.com/blog/tidy-word-vectors/), [2](https://juliasilge.com/blog/word-vectors-take-two/).
+**Sources:**
 
-- [Supervised Machine Learning for Text Analysis - Chapter 5 Word Embeddings](https://smltar.com/embeddings.html)
+-   About word-vectors: [[1](https://juliasilge.com/blog/tidy-word-vectors/)], [[2](https://juliasilge.com/blog/word-vectors-take-two/)].
 
-- [video](https://www.youtube.com/watch?v=ke03DGvT8uU)
+-   Supervised Machine Learning for Text Analysis - [Chapter 5 Word Embeddings](https://smltar.com/embeddings.html)
