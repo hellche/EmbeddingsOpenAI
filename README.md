@@ -5,3 +5,5 @@
 -   About word-vectors: [[1](https://juliasilge.com/blog/tidy-word-vectors/)], [[2](https://juliasilge.com/blog/word-vectors-take-two/)].
 
 -   Supervised Machine Learning for Text Analysis - [Chapter 5 Word Embeddings](https://smltar.com/embeddings.html)
+
+-   OpenAI examples <https://platform.openai.com/docs/guides/embeddings/what-are-embeddings>
