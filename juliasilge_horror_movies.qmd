@@ -1,0 +1,133 @@
+---
+title: "Text Embeddings (OpenAI)"
+---
+
+Based on [Julia Silge's](https://juliasilge.com/blog/horror-embeddings/) blog/workshop.
+
+```{r setup}
+#| include: false
+library(knitr)
+remotes::install_github("bearloga/wikipediapreview-r")
+library(wikipediapreview)
+# wp_init()
+```
+
+## Explore data
+
+```{r}
+library(tidyverse)
+
+set.seed(123)
+horror_movies <- read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-11-01/horror_movies.csv') %>%
+  filter(!is.na(overview), original_language == "en") %>%
+  slice_sample(n = 1000)
+
+glimpse(horror_movies)
+
+sample(horror_movies$overview, size = 3)
+```
+
+## Text embeddings
+
+To learn text embeddings, you need a large amount of text data; companies like [OpenAI](https://openai.com/) (known for GPT-3 and GPT-4) are starting to make [high quality embeddings](https://platform.openai.com/docs/guides/embeddings) available. In the case of OpenAI, the embeddings are available for a fee via API. I registered for an API key and then called the API with my horror movie descriptions.
+
+Before we work with text embeddings, it's good to reflect on the biases that are literally encoded into the numbers that we will be dealing with. Whatever human prejudice or bias exists in the corpus used for training becomes imprinted into the vector data of the embeddings. [OpenAI themselves say](https://platform.openai.com/docs/guides/embeddings/limitations-risks):
+
+
+```{r}
+library(httr)
+embeddings_url <- "https://api.openai.com/v1/embeddings"
+auth <- add_headers(Authorization = paste("Bearer", Sys.getenv("OPENAI_API_KEY")))
+body <- list(model = "text-embedding-ada-002", input = horror_movies$overview)
+
+resp <- POST(
+  embeddings_url,
+  auth,
+  body = body,
+  encode = "json"
+)
+
+embeddings <- content(resp, as = "text", encoding = "UTF-8") %>%
+  jsonlite::fromJSON(flatten = TRUE) %>%
+  pluck("data", "embedding")
+```
+
+This API call costs a couple of cents, as best as I can tell. If you don't want to call the OpenAI API directly, you can use the [openai R package](https://irudnyts.github.io/openai/). Let's add these embeddings as a new column with the horror movie data.
+
+```{r}
+horror_embeddings <-
+  horror_movies %>%
+  mutate(embeddings = embeddings)
+
+horror_embeddings %>%
+  select(id, original_title, embeddings)
+```
+
+The `"text-embedding-ada-002"` vectors returned from OpenAI are pretty big for text vectors, of length 1536. Think of this as a high dimensional space learned from whatever huge datasets of text that OpenAI uses; each of our horror movie descriptions is located somewhere in the high dimensional space, and horror movies that are described similarly are closer to each while those that are described differently are further away. There is a ton we can now do with these vector representations, like clustering them, or maybe [using the clusters like topic models](https://aclanthology.org/2020.emnlp-main.135). Let's walk through two possible applications: finding similar texts and principal component analysis.
+
+For both, it will be useful to have our embeddings in a matrix, instead of a list of numeric vectors:
+
+```{r}
+embeddings_mat <- matrix(
+  unlist(horror_embeddings$embeddings), 
+  ncol = 1536, byrow = TRUE
+)
+
+dim(embeddings_mat)
+```
+
+Notice that we have `r scales::comma(nrow(horror_movies))` rows, one for each of the movies, and 1,536 columns for the 1536-dimensional OpenAI text embeddings.
+
+## Similarity
+
+Let's start by finding the texts most similar to a text we are interested in. We can compute a cosine similarity matrix for all the horror movie descriptions:
+
+```{r}
+embeddings_similarity <- embeddings_mat / sqrt(rowSums(embeddings_mat * embeddings_mat))
+embeddings_similarity <- embeddings_similarity %*% t(embeddings_similarity)
+dim(embeddings_similarity)
+```
+
+This contains the similarity scores for each description compared to each other description. Let's say we are most interesting in this particular movie:
+
+```{r}
+horror_movies %>% 
+  slice(4) %>% 
+  select(title, overview)
+```
+
+Let's pull out the similarity scores relative to this movie:
+
+```{r}
+enframe(embeddings_similarity[4,], name = "movie", value = "similarity") %>%
+  arrange(-similarity)
+```
+
+What are these most similar movies?
+
+```{r}
+horror_movies %>% 
+  slice(c(935, 379, 380)) %>% 
+  select(title, overview)
+```
+
+## PCA
+
+```{r}
+horror_pca <- irlba::prcomp_irlba(embeddings_mat, n = 32)
+```
+
+The `horror_pca` object has the standard deviation of the principal components, the matrix of eigenvectors, and in `x`, the original data multiplied by that matrix, i.e. projected in the new space. Let's bind `x` together with our original dataframe so we have the title and other information. When we plot PC1 vs. PC2, we are looking at the components that explain the most difference between movie descriptions.
+
+```{r}
+augmented_pca <- 
+  as_tibble(horror_pca$x) %>%
+  bind_cols(horror_movies)
+
+augmented_pca %>%
+  ggplot(aes(PC1, PC2, color = vote_average)) +
+  geom_point(size = 1.3, alpha = 0.8) +
+  scale_color_viridis_c()
+```
+
+
